@@ -40,6 +40,6 @@ chown -R apache:apache /var/www/html
 chmod -R 755 /var/www/html
 
 echo "=== INSTALL COMPLETE ==="
-echo "Service URL = http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)"
 
-
+PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+echo "Service URL = http://${PUBLIC_IP}"
