@@ -20,10 +20,10 @@ resource "aws_launch_template" "web_config" {
               rm -f /var/lib/dpkg/lock*
               dpkg --configure -a
 
-              # 2. WordPress를 위한 필수 패키지 설치 (PHP-FPM 포함)
+              # 2. WordPress 필수 패키지 및 AWS CLI 설치 (awscli 추가)
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -y
-              apt-get install -y nginx php-fpm php-mysql php-gd php-cli php-curl php-mbstring php-xml php-xmlrpc wget
+              apt-get install -y nginx php-fpm php-mysql php-gd php-cli php-curl php-mbstring php-xml php-xmlrpc wget awscli
 
               # 3. WordPress 다운로드 및 배치
               wget https://wordpress.org/latest.tar.gz
@@ -39,6 +39,10 @@ resource "aws_launch_template" "web_config" {
               sed -i "s/username_here/admin/g" wp-config.php
               sed -i "s/password_here/password123!/g" wp-config.php
               sed -i "s/localhost/${var.rds_endpoint}/g" wp-config.php
+
+              if [ -f "/var/www/html/config/config.php" ]; then
+                sed -i "s/S3_BUCKET_NAME', '.*'/S3_BUCKET_NAME', '${var.s3_bucket_name}'/g" /var/www/html/config/config.php
+              fi  
 
               # 5. Nginx를 WordPress용으로 설정
               cat <<NGINX > /etc/nginx/sites-available/default
@@ -61,12 +65,32 @@ resource "aws_launch_template" "web_config" {
               wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
               dpkg -i -E ./amazon-cloudwatch-agent.deb
 
+              mkdir -p /opt/aws/amazon-cloudwatch-agent/etc/
+              cat <<JSON > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+              {
+                "logs": {
+                  "logs_collected": {
+                    "files": {
+                      "collect_list": [
+                        {
+                          "file_path": "/var/log/nginx/access.log",
+                          "log_group_name": "/aws/ec2/${var.pjt_name}-web-log",
+                          "log_stream_name": "{instance_id}",
+                          "retention_in_days": 7
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+              JSON
+
               # 서비스 재시작 및 헬스체크용 파일 생성
               systemctl restart nginx
               systemctl restart php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm
-              echo "WordPress is running" > /var/www/html/status.html
+              echo "WordPress is running with AWS CLI" > /var/www/html/status.html
 
-              # CloudWatch Agent 설정 (기존 설정 유지)
+              # CloudWatch Agent 설정
               /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
               EOF
   )
@@ -81,10 +105,10 @@ resource "aws_launch_template" "web_config" {
 
 # 2. Auto Scaling Group
 resource "aws_autoscaling_group" "web_asg" {
-  name                = "${var.pjt_name}-asg"
-  desired_capacity    = 2 
-  max_size            = 4 
-  min_size            = 2 
+  name                      = "${var.pjt_name}-asg"
+  desired_capacity          = 2 
+  max_size                  = 4 
+  min_size                  = 2 
   
   vpc_zone_identifier = var.subnets
 
@@ -96,7 +120,6 @@ resource "aws_autoscaling_group" "web_asg" {
   target_group_arns = [var.target_group_arn]
 
   health_check_type         = "ELB" 
-  # ✅ 유예 기간을 600초(10분)로 넉넉히 주어 설치 완료 시간을 확보합니다.
   health_check_grace_period = 600 
 
   instance_refresh {

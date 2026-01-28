@@ -23,3 +23,8 @@ variable "pjt_name" {
 variable "rds_endpoint" {
   type = string
 }
+
+variable "s3_bucket_name" {
+  description = "생성된 S3 버킷의 이름"
+  type        = string
+}
