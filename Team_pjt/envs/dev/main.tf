@@ -1,3 +1,6 @@
+# 현재 실행 중인 AWS 계정 정보를 가져옵니다.
+data "aws_caller_identity" "current" {}
+
 module "vpc" {
   source = "../../modules/vpc"
 
@@ -37,6 +40,7 @@ module "ec2" {
 
   # ✅ 이 줄을 추가하여 RDS 주소를 전달합니다.
   rds_endpoint          = module.rds.rds_endpoint
+  s3_bucket_name        = aws_s3_bucket.project_bucket.id
 
   depends_on            = [module.vpc]
 }
@@ -133,5 +137,17 @@ resource "aws_backup_selection" "asg_selection" {
     type  = "STRINGEQUALS"
     key   = "Name"
     value = "${var.pjt_name}-asg-web" 
+  }
+}
+
+resource "aws_s3_bucket" "project_bucket" {
+  # 예: whyworks-pjt-s3-123456789012 형식으로 생성됨
+  bucket = "whyworks-pjt-s3-${data.aws_caller_identity.current.account_id}"
+  
+  force_destroy = true
+
+  tags = {
+    Name        = "My Project Bucket"
+    Environment = "Dev"
   }
 }
