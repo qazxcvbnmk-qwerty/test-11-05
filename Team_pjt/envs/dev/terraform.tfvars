@@ -16,4 +16,4 @@ private_subnets = {
 
 ami = "ami-0c9c942bd7bf113a2" # Amazon Linux 2023 (서울)
 
-key_name = "tf-key"  # 👈 AWS에 미리 만든 KeyPair 이름
+key_name = "tf-key" # 👈 AWS에 미리 만든 KeyPair 이름
